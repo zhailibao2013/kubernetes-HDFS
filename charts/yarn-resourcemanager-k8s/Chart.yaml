@@ -1,0 +1,4 @@
+apiVersion: v1
+name: yarn-resourcemanager-k8s
+version: 0.1.0
+description: resourcemanagers in yarn on Kubernetes.

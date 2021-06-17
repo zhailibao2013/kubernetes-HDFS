@@ -1,10 +1,10 @@
-# Provides datanode helper scripts.
+# Provides nodemanager helper scripts.
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ template "hdfs-k8s.datanode.fullname" . }}-scripts
+  name: {{ template "hdfs-k8s.nodemanager.fullname" . }}-scripts
   labels:
-    app: {{ template "hdfs-k8s.datanode.name" . }}
+    app: {{ template "hdfs-k8s.nodemanager.name" . }}
     chart: {{ template "hdfs-k8s.subchart" . }}
     release: {{ .Release.Name }}
 data:
@@ -22,36 +22,35 @@ data:
     # Turn on traces, useful while debugging.
     set -o xtrace
 
-    # Check if datanode registered with the namenode and got non-null cluster ID.
-    _PORTS="50075 1006"
-    _URL_PATH="jmx?qry=Hadoop:service=DataNode,name=DataNodeInfo"
-    _CLUSTER_ID=""
+    # Check if nodemanager registered with the namenode and got non-null cluster ID.
+     _PORTS="8042 1006"
+    _URL_PATH="jmx?qry=Hadoop:service=NodeManager,name=RpcDetailedActivityForPort8040"
+    _Heartbeat_Num_Ops=""
     for _PORT in $_PORTS; do
-      _CLUSTER_ID+=$(curl -s http://localhost:${_PORT}/$_URL_PATH |  \
-          grep ClusterId) || true
+      _Heartbeat_Num_Ops+=$(curl -s http://localhost:${_PORT}/$_URL_PATH |  \
+          grep HeartbeatNumOps) || true
     done
-    echo $_CLUSTER_ID | grep -q -v null
-
+    echo $_Heartbeat_Num_Ops | grep -q -v null
 ---
 # Deleting a daemonset may need some trick. See
 # https://github.com/kubernetes/kubernetes/issues/33245#issuecomment-261250489
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: {{ template "hdfs-k8s.datanode.fullname" . }}
+  name: {{ template "hdfs-k8s.nodemanager.fullname" . }}
   labels:
-    app: {{ template "hdfs-k8s.datanode.name" . }}
+    app: {{ template "hdfs-k8s.nodemanager.name" . }}
     chart: {{ template "hdfs-k8s.subchart" . }}
     release: {{ .Release.Name }}
 spec:
   selector:
     matchLabels:
-      app: {{ template "hdfs-k8s.datanode.name" . }}
+      app: {{ template "hdfs-k8s.nodemanager.name" . }}
       release: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: {{ template "hdfs-k8s.datanode.name" . }}
+        app: {{ template "hdfs-k8s.nodemanager.name" . }}
         release: {{ .Release.Name }}
       {{- if .Values.podAnnotations }}
       annotations:
@@ -67,7 +66,7 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
               - matchExpressions:
-                - key: {{ template "hdfs-k8s.datanode.fullname" . }}-exclude
+                - key: {{ template "hdfs-k8s.nodemanager.fullname" . }}-exclude
                   operator: DoesNotExist
       {{- end }}
       {{- if .Values.nodeSelector }}
@@ -82,8 +81,8 @@ spec:
       hostPID: true
       dnsPolicy: ClusterFirstWithHostNet
       containers:
-        - name: datanode
-          image: uhopper/hadoop-datanode:2.7.2
+        - name: nodemanager
+          image: uhopper/hadoop-nodemanager:2.7.2
           env:
             - name: HADOOP_CUSTOM_CONF_DIR
               value: /etc/hadoop-custom-conf
@@ -102,28 +101,24 @@ spec:
           livenessProbe:
             exec:
               command:
-                - /dn-scripts/check-status.sh
+                - /nm-scripts/check-status.sh
             initialDelaySeconds: 60
             periodSeconds: 30
           readinessProbe:
             exec:
               command:
-                - /dn-scripts/check-status.sh
+                - /nm-scripts/check-status.sh
             initialDelaySeconds: 60
             periodSeconds: 30
           securityContext:
             privileged: true
           volumeMounts:
-            - name: dn-scripts
-              mountPath: /dn-scripts
+            - name: nm-scripts
+              mountPath: /nm-scripts
               readOnly: true
             - name: hdfs-config
               mountPath: /etc/hadoop-custom-conf
               readOnly: true
-            {{- range $index, $path := .Values.global.dataNodeHostPath }}
-            - name: hdfs-data-{{ $index }}
-              mountPath: /hadoop/dfs/data/{{ $index }}
-            {{- end }}
             {{- if .Values.global.kerberosEnabled }}
             - name: kerberos-config
               mountPath: /etc/krb5.conf
@@ -168,9 +163,9 @@ spec:
       {{- end }}
       restartPolicy: Always
       volumes:
-        - name: dn-scripts
+        - name: nm-scripts
           configMap:
-            name: {{ template "hdfs-k8s.datanode.fullname" . }}-scripts
+            name: {{ template "hdfs-k8s.nodemanager.fullname" . }}-scripts
             defaultMode: 0744
         {{- range $index, $path := .Values.global.dataNodeHostPath }}
         - name: hdfs-data-{{ $index }}

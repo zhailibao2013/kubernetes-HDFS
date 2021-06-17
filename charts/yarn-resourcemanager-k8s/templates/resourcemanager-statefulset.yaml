@@ -2,9 +2,9 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ template "hdfs-k8s.namenode.fullname" . }}
+  name: {{ template "hdfs-k8s.resourcemanager.fullname" . }}
   labels:
-    app: {{ template "hdfs-k8s.namenode.name" . }}
+    app: {{ template "hdfs-k8s.resourcemanager.name" . }}
     chart: {{ template "hdfs-k8s.subchart" . }}
     release: {{ .Release.Name }}
   annotations:
@@ -13,27 +13,27 @@ metadata:
     service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
 spec:
   ports:
-  - port: 8020
-    name: fs
-  - port: 50070
+  - port: 8088
     name: http
+  - port: 8032
+    name: rpc
   clusterIP: None
   selector:
-    app: {{ template "hdfs-k8s.namenode.name" . }}
+    app: {{ template "hdfs-k8s.resourcemanager.name" . }}
     release: {{ .Release.Name }}
 ---
 apiVersion: policy/v1beta1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ template "hdfs-k8s.namenode.fullname" . }}
+  name: {{ template "hdfs-k8s.resourcemanager.fullname" . }}
   labels:
-    app: {{ template "hdfs-k8s.namenode.name" . }}
+    app: {{ template "hdfs-k8s.resourcemanager.name" . }}
     chart: {{ template "hdfs-k8s.subchart" . }}
     release: {{ .Release.Name }}
 spec:
   selector:
     matchLabels:
-      app: {{ template "hdfs-k8s.namenode.name" . }}
+      app: {{ template "hdfs-k8s.resourcemanager.name" . }}
       release: {{ .Release.Name }}
   minAvailable: 1
 ---
@@ -43,9 +43,9 @@ spec:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ template "hdfs-k8s.namenode.fullname" . }}-scripts
+  name: {{ template "hdfs-k8s.resourcemanager.fullname" . }}-scripts
   labels:
-    app: {{ template "hdfs-k8s.namenode.name" . }}
+    app: {{ template "hdfs-k8s.resourcemanager.name" . }}
     chart: {{ template "hdfs-k8s.subchart" . }}
     release: {{ .Release.Name }}
 data:
@@ -75,30 +75,14 @@ data:
     # Turn on traces, useful while debugging.
     set -o xtrace
 
-    _HDFS_BIN=$HADOOP_PREFIX/bin/hdfs
+    _YARN_BIN=$HADOOP_PREFIX/bin/yarn
     _METADATA_DIR=/hadoop/dfs/name/current
-    if [[ "$MY_POD" = "$NAMENODE_POD_0" ]]; then
-      if [[ ! -d $_METADATA_DIR ]]; then
-          $_HDFS_BIN --config $HADOOP_CONF_DIR namenode -format  \
-              -nonInteractive hdfs-k8s ||
-              (rm -rf $_METADATA_DIR; exit 1)
-      fi
-      _ZKFC_FORMATTED=/hadoop/dfs/name/current/.hdfs-k8s-zkfc-formatted
-      if [[ ! -f $_ZKFC_FORMATTED ]]; then
-        _OUT=$($_HDFS_BIN --config $HADOOP_CONF_DIR zkfc -formatZK -nonInteractive 2>&1)
-        # zkfc masks fatal exceptions and returns exit code 0
-        (echo $_OUT | grep -q "FATAL") && exit 1
-        touch $_ZKFC_FORMATTED
-      fi
-    elif [[ "$MY_POD" = "$NAMENODE_POD_1" ]]; then
-      if [[ ! -d $_METADATA_DIR ]]; then
-        $_HDFS_BIN --config $HADOOP_CONF_DIR namenode -bootstrapStandby  \
-            -nonInteractive ||  \
-            (rm -rf $_METADATA_DIR; exit 1)
-      fi
+    if [[ "$MY_POD" = "$RM_POD_0" ]]; then
+        echo "$MY_POD"
+    elif [[ "$MY_POD" = "$RM_POD_1" ]]; then
+        echo "$MY_POD"
     fi
-    $HADOOP_PREFIX/sbin/hadoop-daemon.sh --config $HADOOP_CONF_DIR start zkfc
-    $_HDFS_BIN --config $HADOOP_CONF_DIR namenode
+    $_YARN_BIN --config $HADOOP_CONF_DIR resourcemanager
 
   # A start script that will just hang indefinitely. A user can then get
   # inside the pod and debug. Or a user can conduct a custom manual operations.
@@ -113,22 +97,22 @@ data:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ template "hdfs-k8s.namenode.fullname" . }}
+  name: {{ template "hdfs-k8s.resourcemanager.fullname" . }}
   labels:
-    app: {{ template "hdfs-k8s.namenode.name" . }}
+    app: {{ template "hdfs-k8s.resourcemanager.name" . }}
     chart: {{ template "hdfs-k8s.subchart" . }}
     release: {{ .Release.Name }}
 spec:
-  serviceName: {{ template "hdfs-k8s.namenode.fullname" . }}
+  serviceName: {{ template "hdfs-k8s.resourcemanager.fullname" . }}
   replicas: 2
   selector:
     matchLabels:
-      app: {{ template "hdfs-k8s.namenode.name" . }}
+      app: {{ template "hdfs-k8s.resourcemanager.name" . }}
       release: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: {{ template "hdfs-k8s.namenode.name" . }}
+        app: {{ template "hdfs-k8s.resourcemanager.name" . }}
         release: {{ .Release.Name }}
       {{- if .Values.podAnnotations }}
       annotations:
@@ -159,7 +143,7 @@ spec:
                   - key: "app"
                     operator: In
                     values:
-                      - {{ template "hdfs-k8s.namenode.name" . }}
+                      - {{ template "hdfs-k8s.resourcemanager.name" . }}
                   - key: "release"
                     operator: In
                     values:
@@ -177,7 +161,7 @@ spec:
       containers:
         # TODO: Support hadoop version as option.
         - name: hdfs-namenode
-          image: uhopper/hadoop-namenode:2.7.2
+          image: uhopper/hadoop-resourcemanager:2.7.2
           env:
             - name: HADOOP_CUSTOM_CONF_DIR
               value: /etc/hadoop-custom-conf
@@ -188,27 +172,25 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
-            - name: NAMENODE_POD_0
-              value: {{ template "namenode-pod-0" . }}
-            - name: NAMENODE_POD_1
-              value: {{ template "namenode-pod-1" . }}
+            - name: RM_POD_0
+              value: {{ template "rm-pod-0" . }}
+            - name: RM_POD_1
+              value: {{ template "rm-pod-1" . }}
           command: ['/bin/sh', '-c']
           # The start script is provided by a config map.
           args:
-            - /entrypoint.sh "/nn-scripts/{{ .Values.namenodeStartScript }}"
+            - /entrypoint.sh "/rn-scripts/{{ .Values.resourcemanagerStartScript }}"
           ports:
-          - containerPort: 8020
-            name: fs
-          - containerPort: 50070
+          - containerPort: 8088
             name: http
           volumeMounts:
-            - name: nn-scripts
-              mountPath: /nn-scripts
+            - name: rn-scripts
+              mountPath: /rn-scripts
               readOnly: true
             # Mount a subpath of the volume so that the name subdir would be a
             # brand new empty dir. This way, we won't get affected by existing
             # files in the volume top dir.
-            - name: metadatadir
+            - name: rmmetadatadir
               mountPath: /hadoop/dfs/name
               subPath: name
             - name: hdfs-config
@@ -247,9 +229,9 @@ spec:
       {{- end }}
       restartPolicy: Always
       volumes:
-        - name: nn-scripts
+        - name: rn-scripts
           configMap:
-            name: {{ template "hdfs-k8s.namenode.fullname" . }}-scripts
+            name: {{ template "hdfs-k8s.resourcemanager.fullname" . }}-scripts
             defaultMode: 0744
         - name: hdfs-config
           configMap:
@@ -271,7 +253,7 @@ spec:
       {{- end }}
   volumeClaimTemplates:
     - metadata:
-        name: metadatadir
+        name: rmmetadatadir
       spec:
         accessModes:
           - {{ .Values.persistence.accessMode | quote }}

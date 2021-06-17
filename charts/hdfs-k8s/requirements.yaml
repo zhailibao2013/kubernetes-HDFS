@@ -1,11 +1,11 @@
 dependencies:
-  - name: zookeeper
-    version: "1.3.1"
-    repository: https://kubernetes-charts-incubator.storage.googleapis.com/
-    condition: condition.subchart.zookeeper
-    tags:
-      - ha
-      - kerberos
+#  - name: zookeeper
+#    version: "1.3.1"
+#    repository: https://kubernetes-charts-incubator.storage.googleapis.com/
+#    condition: condition.subchart.zookeeper
+#    tags:
+#      - ha
+#      - kerberos
   - name: hdfs-config-k8s
     version: "0.1.0"
     repository: "file://../hdfs-config-k8s"
@@ -57,3 +57,17 @@ dependencies:
       - ha
       - kerberos
       - simple
+  - name: yarn-resourcemanager-k8s
+    version: "0.1.0"
+    repository: "file://../yarn-resourcemanager-k8s"
+    condition: condition.subchart.resourcemanager
+    tags:
+      - ha
+      - kerberos
+  - name: yarn-nodemanager-k8s
+    version: "0.1.0"
+    repository: "file://../yarn-nodemanager-k8s"
+    condition: condition.subchart.nodemanager
+    tags:
+      - ha
+      - kerberos

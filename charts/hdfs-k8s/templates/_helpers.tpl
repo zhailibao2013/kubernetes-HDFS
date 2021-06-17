@@ -92,6 +92,19 @@ Create chart name and version as used by the subchart label.
 {{- end -}}
 {{- end -}}
 
+{{- define "hdfs-k8s.resourcemanager.name" -}}
+{{- template "hdfs-k8s.name" . -}}-resourcemanager
+{{- end -}}
+
+{{- define "hdfs-k8s.resourcemanager.fullname" -}}
+{{- $fullname := include "hdfs-k8s.fullname" . -}}
+{{- if contains "resourcemanager" $fullname -}}
+{{- printf "%s" $fullname -}}
+{{- else -}}
+{{- printf "%s-resourcemanager" $fullname | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "hdfs-k8s.datanode.name" -}}
 {{- template "hdfs-k8s.name" . -}}-datanode
 {{- end -}}
@@ -261,4 +274,52 @@ Construct the full name of the namenode statefulset member 1.
 {{- $service := include "hdfs-k8s.namenode.fullname" . -}}
 {{- $domain := include "svc-domain" . -}}
 {{- printf "%s.%s.%s" $pod $service $domain -}}
+{{- end -}}
+
+
+{{/*
+Construct the name of the resourcemanager pod 0.
+*/}}
+{{- define "rm-pod-0" -}}
+{{- template "hdfs-k8s.resourcemanager.fullname" . -}}-0
+{{- end -}}
+
+{{/*
+Construct the full name of the resourcemanager statefulset member 0.
+*/}}
+{{- define "rm-svc-0" -}}
+{{- $pod := include "rm-pod-0" . -}}
+{{- $service := include "hdfs-k8s.resourcemanager.fullname" . -}}
+{{- $domain := include "svc-domain" . -}}
+{{- printf "%s.%s.%s" $pod $service $domain -}}
+{{- end -}}
+
+{{/*
+Construct the name of the resourcemanager pod 1.
+*/}}
+{{- define "rm-pod-1" -}}
+{{- template "hdfs-k8s.resourcemanager.fullname" . -}}-1
+{{- end -}}
+
+{{/*
+Construct the full name of the resourcemanager statefulset member 1.
+*/}}
+{{- define "rm-svc-1" -}}
+{{- $pod := include "rm-pod-1" . -}}
+{{- $service := include "hdfs-k8s.resourcemanager.fullname" . -}}
+{{- $domain := include "svc-domain" . -}}
+{{- printf "%s.%s.%s" $pod $service $domain -}}
+{{- end -}}
+
+{{- define "hdfs-k8s.nodemanager.name" -}}
+{{- template "hdfs-k8s.name" . -}}-nodemanager
+{{- end -}}
+
+{{- define "hdfs-k8s.nodemanager.fullname" -}}
+{{- $fullname := include "hdfs-k8s.fullname" . -}}
+{{- if contains "nodemanager" $fullname -}}
+{{- printf "%s" $fullname -}}
+{{- else -}}
+{{- printf "%s-nodemanager" $fullname | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
 {{- end -}}
